@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+numpy
+opencv-python
+joblib
+imdbpy
+python-multipart
+python-dotenv

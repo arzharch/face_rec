@@ -45,7 +45,7 @@ def load_dataset(dataset_path):
     return np.array(X), np.array(y)
 
 # Load data from specified dataset path
-dataset_path = r'C:\Users\arshc\Desktop\face_rec\Celebrity Faces Dataset'
+dataset_path = r'C:\Users\arshc\Desktop\face_rec\model\Celebrity Faces Dataset'
 X, y = load_dataset(dataset_path)
 
 # Encode string labels into numerical format
