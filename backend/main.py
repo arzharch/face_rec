@@ -35,27 +35,60 @@ face_model.prepare(ctx_id=0, det_size=(640, 640))
 # Function to fetch actor's movies and shows from TMDb API
 def get_actor_movies_shows(actor_name: str):
     try:
-        search_url = f"https://api.themoviedb.org/3/search/person?api_key={TMDB_API_KEY}&query={actor_name}"
+        search_url = f"https://api.themoviedb.org/3/search/person?api_key={TMDB_API_KEY}&query={actor_name}&language=en-US"
         search_response = requests.get(search_url)
+        search_response.raise_for_status()
         search_data = search_response.json()
 
-        if 'results' not in search_data or not search_data['results']:
-            return []  # Return empty list if no actor found
-        
+        if not search_data.get('results'):
+            return []
+
         actor_id = search_data['results'][0]['id']
-        movies_url = f"https://api.themoviedb.org/3/person/{actor_id}/movie_credits?api_key={TMDB_API_KEY}"
-        shows_url = f"https://api.themoviedb.org/3/person/{actor_id}/tv_credits?api_key={TMDB_API_KEY}"
+        movies_url = f"https://api.themoviedb.org/3/person/{actor_id}/movie_credits?api_key={TMDB_API_KEY}&language=en-US"
+        shows_url = f"https://api.themoviedb.org/3/person/{actor_id}/tv_credits?api_key={TMDB_API_KEY}&language=en-US"
 
-        movies_response, shows_response = requests.get(movies_url), requests.get(shows_url)
-        movies_data, shows_data = movies_response.json(), shows_response.json()
+        movies_response = requests.get(movies_url)
+        shows_response = requests.get(shows_url)
+        movies_response.raise_for_status()
+        shows_response.raise_for_status()
 
-        movies = [movie['title'] for movie in movies_data.get('cast', [])]
-        shows = [show['name'] for show in shows_data.get('cast', [])]
+        movies_data = movies_response.json()
+        shows_data = shows_response.json()
 
-        return movies + shows
+        # Base URL for images
+        IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 
-    except Exception:
-        return []  # Return empty list on error
+        # Process movies
+        movies = [
+            {
+                "title": movie.get("title"),
+                "poster_path": f"{IMAGE_BASE_URL}{movie.get('poster_path')}" if movie.get("poster_path") else None,
+                "overview": movie.get("overview"),
+                "media_type": "movie"
+            }
+            for movie in movies_data.get('cast', [])
+            if movie.get("title") and movie.get("poster_path")
+        ]
+
+        # Process TV shows
+        shows = [
+            {
+                "title": show.get("name"),
+                "poster_path": f"{IMAGE_BASE_URL}{show.get('poster_path')}" if show.get("poster_path") else None,
+                "overview": show.get("overview"),
+                "media_type": "tv"
+            }
+            for show in shows_data.get('cast', [])
+            if show.get("name") and show.get("poster_path")
+        ]
+
+        # Combine
+        combined = movies + shows
+        return combined
+
+    except requests.exceptions.RequestException as e:
+        print(f"TMDb API Error: {e}")
+        return []
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
@@ -88,11 +121,14 @@ async def predict(file: UploadFile = File(...)):
         label = le.inverse_transform([pred])[0]
         movies_and_shows = get_actor_movies_shows(label)
 
-        return {
+        # Format the response exactly as specified
+        response = {
             "actor": label,
             "movies": movies_and_shows,
             "confidence": round(confidence, 2)
         }
 
+        return response
+
     except Exception as e:
-        return {"actor": "Unknown", "movies": [], "confidence": 0.0, "error": str(e)}
+        return {"actor": "Unknown", "movies": [], "confidence": 0.0}
